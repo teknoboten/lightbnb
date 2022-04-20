@@ -39,8 +39,7 @@ const getUserWithId = function(id) {
   return pool.query(queryString, [id])
     .then(result => {
       result.rows[0];
-    }
-    );
+    });
 };
 
 exports.getUserWithId = getUserWithId;
@@ -60,10 +59,7 @@ const addUser = function(user) {
   RETURNING *;`;
  
   return pool.query(queryString, values)
-    .then(result => {
-      result.rows[0];
-    }
-    );
+    .then(result => result.rows[0]);
 };
 
 exports.addUser = addUser;
@@ -106,11 +102,6 @@ exports.getAllReservations = getAllReservations;
 
 
 
-
-
-
-
-
 /// Properties
 
 /**
@@ -120,40 +111,64 @@ exports.getAllReservations = getAllReservations;
  * @return {Promise<[{}]>}  A promise to the properties.
  */
 
-/*reminder!
-* .then _always_ returns a promise and a promise is an _object_
-* so even though result.rows is an array, .then returns it as part the the promise object
-* we are using promises here bc other parts of the app (apiroutes) expect them
-*/
+const getAllProperties = (options, limit = 2) => {
 
-const getAllProperties = (options, limit = 1) => {
+  const queryParams = [];
+
+  let queryString = `
+  SELECT properties.*, 
+  avg(property_reviews.rating) as average_rating
+  FROM properties
+  JOIN property_reviews ON properties.id = property_id
+  WHERE true
+  `;
+
+  if (options.owner_id) {
+    queryParams.push(options.owner_id);
+    queryString += `AND owner_id = $${queryParams.length} `;
+  }
+
+  if (options.city) {
+    queryParams.push(`%${options.city.toUpperCase()}%`);
+    queryString += `AND upper(city) LIKE $${queryParams.length} `;
+  }
+
+  if (options.minimum_price_per_night) {
+    queryParams.push(options.minimum_price_per_night * 100);
+    queryString += `AND cost_per_night >= $${queryParams.length} `;
+  }
+
+  if (options.minimum_price_per_night) {
+    queryParams.push(options.minimum_price_per_night * 100);
+    queryString += `AND cost_per_night >= $${queryParams.length} `;
+  }
+
+  if (options.maximum_price_per_night) {
+    queryParams.push(options.maximum_price_per_night * 100);
+    queryString += `AND cost_per_night <= $${queryParams.length} `;
+  }
+
+  if (options.minimum_rating) {
+    queryParams.push(options.minimum_rating);
+    queryString += `AND rating >= $${queryParams.length} `;
+  }
+
+  queryParams.push(limit);
+  queryString += `
+  GROUP BY properties.id
+  ORDER BY cost_per_night
+  LIMIT $${queryParams.length};
+  `;
+
   return pool
-    .query(`SELECT * FROM properties LIMIT $1`, [limit])
+    .query(queryString, queryParams)
     .then((result) => {
+      // console.log('results:', result.rows[0]);
       return result.rows;
-    })
-    .catch(error => console.log(error.message));
+    });
 };
+
 exports.getAllProperties = getAllProperties;
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
@@ -163,9 +178,20 @@ exports.getAllProperties = getAllProperties;
  * @return {Promise<{}>} A promise to the property.
  */
 const addProperty = function(property) {
-  const propertyId = Object.keys(properties).length + 1;
-  property.id = propertyId;
-  properties[propertyId] = property;
-  return Promise.resolve(property);
+  const values = [property.owner_id, property.title.toLowerCase(), property.description, property.thumbnail_photo_url,
+    property.cover_photo_url, property.cost_per_night, property.street.toLowerCase(), property.city.toLowerCase(),
+    property.province.toLowerCase(), property.post_code, property.country.toLowerCase(), property.parking_spaces,
+    property.number_of_bathrooms, property.number_of_bedrooms ];  
+
+  const queryString = `INSERT INTO properties (owner_id, title, description, thumbnail_photo_url, cover_photo_url, 
+    cost_per_night, street, city, province, post_code, country, parking_spaces, number_of_bathrooms, number_of_bedrooms)
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+    RETURNING *;`;
+
+  return pool.query(queryString, values)
+    .then((result) => {
+      return result.rows;
+    });
 };
+
 exports.addProperty = addProperty;
